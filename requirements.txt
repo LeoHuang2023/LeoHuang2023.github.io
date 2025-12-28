@@ -1,0 +1,6 @@
+requests
+line-bot-sdk
+flask
+google-cloud-storage
+google-cloud-firestore
+pillow
