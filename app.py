@@ -40,7 +40,7 @@ CWA_KEY = os.getenv('CWA_KEY')
 # 2. 設定 Gemini (使用 2.0 Flash)
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
 else:
     model = None
     print("⚠️ 警告: 未設定 GEMINI_API_KEY")
