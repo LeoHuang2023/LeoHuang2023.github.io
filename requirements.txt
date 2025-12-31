@@ -1,6 +1,7 @@
 requests
 line-bot-sdk
 flask
+python-dotenv
 google-cloud-storage
 google-cloud-firestore
 pillow
