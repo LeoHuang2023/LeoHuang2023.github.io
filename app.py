@@ -23,11 +23,18 @@ from linebot.v3.webhooks import (
     LocationMessageContent
 )
 
-# 嘗試載入 cwa 模組
+# --- 修改點 1: 改良 Import 區塊，顯示載入是否成功 ---
 try:
     import cwa
-except ImportError:
+    print("✅ System: CWA 氣象模組載入成功！")
+except ImportError as e:
     cwa = None
+    print(f"❌ System: CWA 氣象模組載入失敗: {e}")
+    traceback.print_exc()
+except Exception as e:
+    cwa = None
+    print(f"❌ System: CWA 載入發生未知錯誤: {e}")
+    traceback.print_exc()
 
 # 1. 初始化環境變數
 load_dotenv()
@@ -76,23 +83,40 @@ def handle_message(event):
     ask = event.message.text
     ask_lower = ask.lower()
     
+# --- 修改點 2: 加入氣象查詢的詳細 Logs ---
     ask_map = {
         'hello': '我很好', 
         'hi': '您哪位',
         '你好': '你好呀！傳張寵物照片給我看看？'
     }
-    
+
     ans = ask_map.get(ask_lower)
     
+    if not ans:
+        # 印出變數狀態，確認是否有資格進入查詢
+        print(f"🔍 Debug: 準備判斷氣象 -> cwa模組={cwa is not None}, Key={bool(CWA_KEY)}")
+
     if not ans and cwa and CWA_KEY:
         try:
+            print(f"🚀 Debug: 開始呼叫 CWA API 查詢: {ask}")
+            
+            # 執行查詢
             weather_data = cwa.cwa2(ask, CWA_KEY)
+            
+            # 印出回傳結果 (確認是不是 None 或是錯誤訊息)
+            print(f"📦 Debug: CWA 回傳資料型態: {type(weather_data)}")
+            
             if weather_data:
                 ans = cwa.tostr(weather_data, '\n')
+                print("✅ Debug: 氣象解析成功，產生回答。")
             else:
                 ans = None 
-        except Exception:
+                print("⚠️ Debug: 氣象資料為 None (可能是地點不對或 API 錯誤)")
+                
+        except Exception as e:
             ans = None
+            print(f"❌ Debug: 氣象查詢過程發生崩潰 (Exception): {e}")
+            traceback.print_exc()
 
     if not ans:
         ans = "我聽不懂你在說什麼～試試傳一張寵物照片給我！🐶🐱"
