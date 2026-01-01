@@ -14,7 +14,7 @@ def _load_sitemaps(key):
     params = {'Authorization': key}
 
     for url in URLS:
-        r = requests.get(url, params=params)
+        r = requests.get(url, params=params, verify=False)
         for s in r.json()['records']['Station']:
             #sitemaps[s['StationName']] = url
             c = (float(s['GeoInfo']['Coordinates'][1]['StationLatitude']),
@@ -65,7 +65,7 @@ def _cwa(url, site, key):
               'StationName': site
              }
     try:
-        r = requests.get(url, params=params)
+        r = requests.get(url, params=params, verify=False)
     except Exception as e:
         print(e)
         return {}
