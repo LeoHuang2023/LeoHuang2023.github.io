@@ -44,7 +44,7 @@ CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 CWA_KEY = os.getenv('CWA_KEY')
 
-# 2. 設定 Gemini (使用 2.0 Flash)
+# 2. 設定 Gemini (使用 1.5 Flash)
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-flash-latest')
@@ -63,6 +63,12 @@ else:
     print("⚠️ 警告: 未設定 LINE Channel Token/Secret")
 
 # 3. Webhook 入口
+
+@app.route("/")
+def home():
+    return "Hello, I'm alive!", 200
+
+
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
