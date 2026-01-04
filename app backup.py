@@ -14,10 +14,7 @@ from linebot.v3.messaging import (
     MessagingApi,
     MessagingApiBlob,
     ReplyMessageRequest,
-    TextMessage,
-    QuickReply,
-    QuickReplyItem,
-    LocationAction
+    TextMessage
 )
 from linebot.v3.webhooks import (
     MessageEvent,
@@ -25,9 +22,6 @@ from linebot.v3.webhooks import (
     ImageMessageContent,
     LocationMessageContent
 )
-
-import nearby_places_overpass   # 載入附近地點模組
-
 
 # --- 修改點 1: 改良 Import 區塊，顯示載入是否成功 ---
 try:
@@ -49,12 +43,6 @@ CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 CWA_KEY = os.getenv('CWA_KEY')
-
-# --- 簡單的狀態儲存 (注意: 重啟後會清空) ---
-# 格式: { 'User_ID': 'weather' 或 'food' }
-user_state = {}
-
-
 
 # 2. 設定 Gemini (使用 1.5 Flash)
 if GEMINI_API_KEY:
@@ -98,46 +86,10 @@ def callback():
 # 4. 文字訊息處理
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
-    user_id = event.source.user_id
     ask = event.message.text
     ask_lower = ask.lower()
     
-
-# 預設回答
-    ans = None
-
-
-# --- 關鍵字判斷 ---
-    if '餐廳' in ask or '餓' in ask or '吃饭' in ask:
-        # 1. 標記該用戶狀態為 "找食物"
-        user_state[user_id] = 'food'
-        
-        # 2. 建立 "請傳送位置" 的快速回覆按鈕
-        reply_msg = TextMessage(
-            text="請按下方的按鈕傳送您的位置，我來幫您找附近的寵物友善餐廳！📍",
-            quick_reply=QuickReply(
-                items=[
-                    QuickReplyItem(
-                        action=LocationAction(label="傳送目前位置")
-                    )
-                ]
-            )
-        )
-        
-        # 3. 直接回覆並結束函式
-        with ApiClient(configuration) as api_client:
-            line_bot_api = MessagingApi(api_client)
-            line_bot_api.reply_message(
-                ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[reply_msg]
-                )
-            )
-        return
-
-
-
-# -----原有對話 ---
+# --- 修改點 2: 加入氣象查詢的詳細 Logs ---
     ask_map = {
         'hello': '我很好', 
         'hi': '您哪位',
@@ -145,8 +97,7 @@ def handle_message(event):
     }
 
     ans = ask_map.get(ask_lower)
-
-# --- 原有的氣象邏輯 (當輸入地名時) ---    
+    
     if not ans:
         # 印出變數狀態，確認是否有資格進入查詢
         print(f"🔍 Debug: 準備判斷氣象 -> cwa模組={cwa is not None}, Key={bool(CWA_KEY)}")
@@ -174,7 +125,7 @@ def handle_message(event):
             traceback.print_exc()
 
     if not ans:
-        ans = "我聽不懂你在說什麼～試試輸入「餐廳」或是傳一張寵物照片給我！🐶🐱"
+        ans = "我聽不懂你在說什麼～試試傳一張寵物照片給我！🐶🐱"
 
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
@@ -185,70 +136,18 @@ def handle_message(event):
             )
         )
 
-# --- 5. 地點訊息處理 (整合天氣與餐廳) ---
-
+# 5. 地點訊息處理
 @handler.add(MessageEvent, message=LocationMessageContent)
 def handle_location_message(event):
-
-    user_id = event.source.user_id
-    lat = event.message.latitude
-    lon = event.message.longitude
-    
-    # 取得用戶目前的狀態，預設為 'weather'
-    current_mode = user_state.get(user_id, 'weather')
-    
-    ans = ""
-
-    if current_mode == 'food':
-        # --- 執行找餐廳邏輯 ---
-        try:
-            print(f"🚀 Debug: 開始搜尋餐廳 Lat={lat}, Lon={lon}")
-            
-            # 呼叫 nearby_places_overpass
-            # strict=False 表示搜尋所有餐廳 (因 OSM 寵物友善標籤在台灣較少)
-            # 參數依照您的要求: radius_m=2000, top_n=10
-            results = nearby_places_overpass.search_nearby_pet_friendly_food(
-                latitude=lat, 
-                longitude=lon, 
-                radius_m=2000, 
-                top_n=10, 
-                strict=False 
-            )
-            
-            if not results:
-                ans = "附近 2公里內找不到餐廳資料 😭"
-            else:
-                ans = "🍽️ 附近的餐廳 (距離近->遠):\n"
-                for i, r in enumerate(results, 1):
-                    name = r.get('name', '未命名餐廳')
-                    dist = r.get('distance_m', 0)
-                    addr = r.get('address') or "無地址資訊"
-                    # rating = r.get("rating")
-                    # rating_text = "N/A" if rating is None else str(rating)
-                                        
-                    # 組合文字
-                    ans += f"\n{i}. {name}\n   📍 {dist}公尺\n   🏠 {addr}\n"
-            
-            # 搜尋完畢後，清除狀態 (恢復成預設查天氣)
-            del user_state[user_id]
-
-        except Exception as e:
-            traceback.print_exc()
-            ans = "搜尋餐廳時發生錯誤，請稍後再試。"
-            if user_id in user_state: del user_state[user_id]
-
-
-    else:
-        if not cwa or not CWA_KEY:
-           ans = "抱歉，氣象功能暫時無法使用 ☁️"  # 給個回應
+    if not cwa or not CWA_KEY:
+        return
         
-        else:
-            site = (event.message.latitude, event.message.longitude)
-            try:
-                ans = cwa.cwa2(site, CWA_KEY)
-                ans = cwa.tostr(ans, '\n') or '無此站'
-            except:
-                ans = "無法查詢該地點氣象"
+    site = (event.message.latitude, event.message.longitude)
+    try:
+        ans = cwa.cwa2(site, CWA_KEY)
+        ans = cwa.tostr(ans, '\n') or '無此站'
+    except:
+        ans = "無法查詢該地點氣象"
 
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
@@ -283,7 +182,7 @@ def handle_content_message(event):
             """
             response = model.generate_content([prompt, image])
             
-            # #清理 JSON 字串
+            # 清理 JSON 字串
             text = response.text.strip()
             if text.startswith("```json"): text = text[7:]
             if text.startswith("```"): text = text[3:]
